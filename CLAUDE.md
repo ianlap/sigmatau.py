@@ -33,11 +33,16 @@ One Python module per Julia source file, same names:
   `tau_values`, `_kernel_m_max`, `_grid`, `_default_m_values`, `_freq_to_phase`, `_f64`.
 - `src/sigmatau/kernels.py`    ← `kernels.jl`    — internal `_*_core` array
   kernels (plain `np.ndarray` in, `np.ndarray` out). NumPy-vectorized.
-- `src/sigmatau/deviations.py` ← `deviations.jl` — public `adev`/`mdev`/`tdev`/
-  `hdev`/`mhdev`/`htdev` (`PhaseData`|`FrequencyData` → `StabilityResult`).
+- `src/sigmatau/deviations.py` ← `deviations.jl` — public deviations
+  (`PhaseData`|`FrequencyData` → `StabilityResult`).
+- `src/sigmatau/edf.py`        ← `edf.jl`        — EDF, bias correction, CIs (scipy χ²).
+- `src/sigmatau/noise.py`      ← `noise.jl`      — `identify_noise` + `noise_gen`.
+- `src/sigmatau/spectral.py`   ← `spectral.jl`   — Welch PSD + `Sy`/`Sx`/`L`.
+- `src/sigmatau/suite.py`      ← `suite.jl`      — `stability` compute-all.
+- `src/sigmatau/io/`           ← `io/`           — `read_phase`/`read_frequency`,
+  `detrend`, `fillgaps`, `save_result`/`load_result`/`save_suite`/`load_suite`.
 
-Later cycles add `suite.py`, `edf.py`, `noise.py`, `spectral.py`, and `io/` as
-their Julia counterparts get ported.
+Only the plotting helpers (the RecipesBase extension equivalent) remain to port.
 
 ### Critical conventions — do not violate
 

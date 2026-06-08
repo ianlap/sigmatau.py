@@ -33,8 +33,19 @@ from .grids import (
     TauMode,
     tau_values,
 )
+from .io import (
+    detrend,
+    fillgaps,
+    load_result,
+    load_suite,
+    read_frequency,
+    read_phase,
+    save_result,
+    save_suite,
+)
 from .noise import identify_noise, noise_gen
 from .spectral import L, Sx, Sy
+from .suite import DEFAULT_DEVIATIONS, stability
 from .types import FrequencyData, PhaseData, SpectralResult, StabilityResult, StabilitySuite
 
 __version__ = "0.1.0"
@@ -80,4 +91,16 @@ __all__ = [
     "Sy",
     "Sx",
     "L",
+    # compute-all suite
+    "stability",
+    "DEFAULT_DEVIATIONS",
+    # file IO
+    "read_phase",
+    "read_frequency",
+    "detrend",
+    "fillgaps",
+    "save_result",
+    "load_result",
+    "save_suite",
+    "load_suite",
 ]

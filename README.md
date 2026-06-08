@@ -61,8 +61,11 @@ hdev(fd)                                         # frequency input also works
    bit-parity).
 6. Final supporting layer:
    - ✅ Spectral estimators `Sy`/`Sx`/`L` (Welch PSD, parity-validated).
-   - IO: `read_phase`/`read_frequency`, `detrend`, `fillgaps`, TSV round-trip.
-   - Plotting helpers.
+   - ✅ `stability` compute-all suite.
+   - ✅ IO: `read_phase`/`read_frequency`, `detrend`, `fillgaps` (Howe,
+     parity-validated), `save_result`/`load_result`/`save_suite`/`load_suite`
+     (TSV, round-trips with the Julia oracle's files).
+   - Plotting helpers (last remaining piece; smoke-tested only).
 
 Numba was originally slated to accelerate the long-record kernels, but every
 kernel so far vectorizes in NumPy (the modified-total family uses a
