@@ -60,11 +60,22 @@ repo and copying its output here.
 
 ## Status / roadmap
 
-Through milestone 3: all 13 deviations — `adev`, `mdev`, `tdev`, `hdev`,
-`mhdev`, `htdev`, `totdev`, `mtotdev`, `ttotdev`, `htotdev`, `mhtotdev`, `mtie`,
-`pdev` — all raw kernels, all parity-validated against the oracle. The
-modified-total family uses a per-subsequence loop with vectorized inner
-reductions (parity exported on the synthetic N=1024 records, octave grid).
+Through milestone 4: all 13 deviations with full statistics — `adev`, `mdev`,
+`tdev`, `hdev`, `mhdev`, `htdev`, `totdev`, `mtotdev`, `ttotdev`, `htotdev`,
+`mhtotdev`, `mtie`, `pdev`. `ci=True` (default) reports per-τ noise type,
+equivalent degrees of freedom, and χ²-based confidence intervals;
+`correct_bias=True` (default) applies the SP1065/FCS bias correction to the
+total family. Defaults now match the Julia oracle exactly — no temporary
+divergences remain. `mtie` has no CI model (`ci`/`confidence` are no-ops).
+
+Stats live in `noise.py` (`identify_noise` + lag-1/B1 helpers) and `edf.py`
+(`calculate_edf`, `bias_correction`, `confidence_intervals`; `scipy.stats` for
+χ²/normal quantiles). The modified-total family uses a per-subsequence loop with
+vectorized inner reductions (parity exported on the synthetic N=1024 records,
+octave grid).
+
+Parity tolerances: deviation/EDF `rtol=1e-11`, noise type exact, CI `rtol=1e-9`
+(scipy vs Distributions.jl quantiles).
 
 Temporary divergences from Julia (all flip when the stats cycle lands):
 - `ci` defaults to **False** (Julia: `True`); `ci=True` raises `NotImplementedError`

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 import sigmatau as st
+
+_VALID_NOISE = {"WHPM", "FLPM", "WHFM", "FLFM", "RWFM", "unknown"}
 
 
 def _phase(n: int = 512, seed: int = 0) -> st.PhaseData:
@@ -35,13 +36,13 @@ def test_constant_phase_is_zero() -> None:
     # scale) — the same the Julia oracle produces. Allow a tiny absolute floor.
     pd = st.PhaseData(np.full(128, 3.14), 1.0)
     for fn in (st.adev, st.mdev, st.hdev, st.mhdev):
-        np.testing.assert_allclose(fn(pd, [1, 2, 4]).dev, 0.0, atol=1e-12)
+        np.testing.assert_allclose(fn(pd, [1, 2, 4], ci=False).dev, 0.0, atol=1e-12)
 
 
 def test_linear_phase_zero_adev() -> None:
     # Linear phase = constant frequency: ADEV's second difference annihilates it.
     pd = st.PhaseData(np.arange(128, dtype=float) * 2.5, 1.0)
-    np.testing.assert_allclose(st.adev(pd, [1, 2, 4, 8]).dev, 0.0, atol=1e-20)
+    np.testing.assert_allclose(st.adev(pd, [1, 2, 4, 8], ci=False).dev, 0.0, atol=1e-20)
 
 
 def test_frequency_dispatch_matches_phase_integration() -> None:
@@ -51,38 +52,48 @@ def test_frequency_dispatch_matches_phase_integration() -> None:
     pd = st.PhaseData(np.cumsum(y) * 1.0, 1.0)
     m = [1, 2, 4, 8]
     for fn in (st.adev, st.mdev, st.hdev, st.mhdev):
-        np.testing.assert_allclose(fn(fd, m).dev, fn(pd, m).dev, rtol=1e-13)
+        np.testing.assert_allclose(fn(fd, m, ci=False).dev, fn(pd, m, ci=False).dev, rtol=1e-13)
 
 
 def test_undersampled_is_nan() -> None:
     pd = st.PhaseData(np.arange(8.0), 1.0)
     # adev needs N - 2m >= 2; m=4 -> 0 windows -> NaN.
-    assert np.isnan(st.adev(pd, [4]).dev[0])
+    assert np.isnan(st.adev(pd, [4], ci=False).dev[0])
 
 
 def test_ci_false_leaves_empty_fields() -> None:
     pd = _phase(64)
-    r = st.adev(pd, [1, 2, 4])
+    r = st.adev(pd, [1, 2, 4], ci=False)
     assert r.noise_type.size == 0
     assert r.ci_lower.size == 0
     assert r.ci_upper.size == 0
     assert r.edf.size == 0
 
 
-def test_ci_true_not_implemented() -> None:
-    pd = _phase(64)
-    for fn in (st.adev, st.mdev, st.tdev, st.hdev, st.mhdev, st.htdev, st.totdev, st.pdev):
-        with pytest.raises(NotImplementedError):
-            fn(pd, [1, 2], ci=True)
-
-
-def test_total_family_correct_bias_not_implemented() -> None:
-    pd = _phase(64)
-    for fn in (st.totdev, st.mtotdev, st.ttotdev, st.htotdev, st.mhtotdev):
-        with pytest.raises(NotImplementedError):
-            fn(pd, [1, 2], correct_bias=True)
-        with pytest.raises(NotImplementedError):
-            fn(pd, [1, 2], ci=True)
+def test_ci_true_populates_and_brackets() -> None:
+    # Default ci=True now reports noise type, EDF, and bracketing χ² bounds.
+    pd = _phase(1024)
+    for fn in (
+        st.adev,
+        st.mdev,
+        st.tdev,
+        st.hdev,
+        st.mhdev,
+        st.htdev,
+        st.pdev,
+        st.totdev,
+        st.mtotdev,
+        st.ttotdev,
+        st.htotdev,
+        st.mhtotdev,
+    ):
+        r = fn(pd, [1, 2, 4, 8])
+        assert r.edf.size == r.dev.size
+        assert set(r.noise_type).issubset(_VALID_NOISE)
+        finite = np.isfinite(r.dev) & np.isfinite(r.edf)
+        assert np.all(r.edf[finite] > 0.0)
+        assert np.all(r.ci_lower[finite] <= r.dev[finite] + 1e-300)
+        assert np.all(r.dev[finite] <= r.ci_upper[finite] + 1e-300)
 
 
 def test_ttotdev_is_mtotdev_scaled() -> None:

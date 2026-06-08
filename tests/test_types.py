@@ -30,9 +30,9 @@ def test_integer_input_promoted_to_float64() -> None:
 
 def test_result_repr() -> None:
     pd = st.PhaseData(np.cumsum(np.random.default_rng(0).standard_normal(256)) * 1e-9)
-    text = repr(st.adev(pd, st.Octave))
-    assert text.startswith("StabilityResult(adev,")
-    assert "no CI" in text
+    assert "with CI" in repr(st.adev(pd, st.Octave))  # ci=True by default now
+    assert "no CI" in repr(st.adev(pd, st.Octave, ci=False))
+    assert repr(st.adev(pd, st.Octave)).startswith("StabilityResult(adev,")
 
 
 def test_suite_indexing() -> None:

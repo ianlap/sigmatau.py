@@ -21,6 +21,7 @@ from .deviations import (
     totdev,
     ttotdev,
 )
+from .edf import bias_correction, calculate_edf, confidence_intervals
 from .grids import (
     AllTaus,
     Decade,
@@ -31,6 +32,7 @@ from .grids import (
     TauMode,
     tau_values,
 )
+from .noise import identify_noise
 from .types import FrequencyData, PhaseData, StabilityResult, StabilitySuite
 
 __version__ = "0.1.0"
@@ -64,4 +66,9 @@ __all__ = [
     "mhtotdev",
     "mtie",
     "pdev",
+    # statistics
+    "identify_noise",
+    "calculate_edf",
+    "confidence_intervals",
+    "bias_correction",
 ]
