@@ -34,7 +34,8 @@ from .grids import (
     tau_values,
 )
 from .noise import identify_noise, noise_gen
-from .types import FrequencyData, PhaseData, StabilityResult, StabilitySuite
+from .spectral import L, Sx, Sy
+from .types import FrequencyData, PhaseData, SpectralResult, StabilityResult, StabilitySuite
 
 __version__ = "0.1.0"
 
@@ -44,6 +45,7 @@ __all__ = [
     "FrequencyData",
     "StabilityResult",
     "StabilitySuite",
+    "SpectralResult",
     # tau grids
     "TauMode",
     "AllTaus",
@@ -74,4 +76,8 @@ __all__ = [
     "bias_correction",
     # noise generation
     "noise_gen",
+    # spectral estimators
+    "Sy",
+    "Sx",
+    "L",
 ]

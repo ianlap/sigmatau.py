@@ -131,9 +131,35 @@ class StabilitySuite:
         )
 
 
+@dataclass(frozen=True)
+class SpectralResult:
+    """Unified return type for every spectral-density estimate (``Sy``/``Sx``/``L``).
+
+    A flat, non-parametric record: the one-sided frequency grid, the estimated
+    spectrum, and the Welch parameters that produced it.
+    """
+
+    spectral_type: str
+    freq: np.ndarray
+    psd: np.ndarray
+    units: str
+    nperseg: int
+    noverlap: int
+    window: str
+
+    def __repr__(self) -> str:
+        n = self.freq.size
+        rng = "" if n == 0 else f", f∈[{self.freq[0]}, {self.freq[-1]}] Hz"
+        return (
+            f"SpectralResult({self.spectral_type}, {n} bins{rng}, "
+            f"{self.units}, nperseg={self.nperseg})"
+        )
+
+
 __all__ = [
     "PhaseData",
     "FrequencyData",
     "StabilityResult",
     "StabilitySuite",
+    "SpectralResult",
 ]

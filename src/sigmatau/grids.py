@@ -126,6 +126,11 @@ def _freq_to_phase(data: FrequencyData) -> PhaseData:
     return PhaseData(np.cumsum(data.y) * data.tau0, data.tau0)
 
 
+def _phase_to_freq(data: PhaseData) -> FrequencyData:
+    """Convert phase to fractional frequency via ``y[k] = (x[k+1]−x[k])/τ₀`` (N → N−1)."""
+    return FrequencyData(np.diff(data.x) / data.tau0, data.tau0)
+
+
 def _resolve_m(taus: TauMode | Sequence[int], n: int, kernel: str) -> list[int]:
     """Resolve the ``taus`` argument to an explicit list of integer averaging factors."""
     if isinstance(taus, TauMode):

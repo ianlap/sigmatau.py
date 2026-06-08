@@ -59,7 +59,10 @@ hdev(fd)                                         # frequency input also works
 5. ✅ `noise_gen` calibrated power-law generator (property-validated — RNGs
    differ across languages, so it's checked by calibration/identities, not
    bit-parity).
-6. IO, spectral estimators (`Sy`/`Sx`/`L`), plotting.
+6. Final supporting layer:
+   - ✅ Spectral estimators `Sy`/`Sx`/`L` (Welch PSD, parity-validated).
+   - IO: `read_phase`/`read_frequency`, `detrend`, `fillgaps`, TSV round-trip.
+   - Plotting helpers.
 
 Numba was originally slated to accelerate the long-record kernels, but every
 kernel so far vectorizes in NumPy (the modified-total family uses a
