@@ -52,12 +52,14 @@ hdev(fd)                                         # frequency input also works
 ## Performance
 
 A three-way benchmark (`benchmarks/bench.py`, see `benchmarks/RESULTS.md`) times
-the common deviations against [allantools](https://github.com/aewallin/allantools)
-and the compiled Julia oracle on an identical record. On a 100k-sample run,
-sigmatau is faster than allantools on the overlapping Allan/Hadamard kernels
-(adev ~1.4×, mdev ~2.7×, hdev ~1.3×); the compiled SigmaTau.jl is naturally
-fastest of the three. Ratios are the portable result — absolute times vary with
-hardware.
+the deviations against [allantools](https://github.com/aewallin/allantools) and
+the compiled Julia oracle on an identical record. sigmatau is faster than
+allantools on the overlapping Allan/Hadamard kernels (adev ~1.4×, mdev ~2.8×,
+hdev ~1.1×, totdev roughly on par) and **dramatically faster on the modified-total
+family — ~45× on `mtotdev`/`htotdev`** (sigmatau vectorizes them; allantools runs
+pure-Python loops: ~2.7 s vs ~120 s at N=8k). The compiled SigmaTau.jl is
+naturally fastest of the three. Ratios are the portable result — absolute times
+vary with hardware.
 
 ## Roadmap
 
