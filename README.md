@@ -6,10 +6,11 @@ rich result objects. A NumPy-native port of
 reference oracle: every kernel is validated against golden fixtures exported
 from the tagged Julia release.
 
-> **Status:** early (through milestone 3a). Implements `adev`, `mdev`, `tdev`,
-> `hdev`, `mhdev`, `htdev`, plus `totdev`, `mtie`, and `pdev` — all validated
-> against the Julia oracle. No confidence intervals or bias correction yet (raw
-> kernels; see the roadmap). The API mirrors SigmaTau.jl one-to-one.
+> **Status:** all 13 deviations implemented (through milestone 3) — `adev`,
+> `mdev`, `tdev`, `hdev`, `mhdev`, `htdev`, `totdev`, `mtotdev`, `ttotdev`,
+> `htotdev`, `mhtotdev`, `mtie`, `pdev` — every one validated against the Julia
+> oracle. No confidence intervals or bias correction yet (raw kernels; see the
+> roadmap). The API mirrors SigmaTau.jl one-to-one.
 
 ## Install
 
@@ -48,17 +49,18 @@ hdev(fd)                                         # frequency input also works
 ## Roadmap
 
 1. ✅ Bare deviations: `adev`, `mdev`, `tdev`, `hdev`, `mhdev`, `htdev`.
-2. ✅ `totdev`, `mtie`, `pdev` (raw kernels) — all pure NumPy.
-3. The modified-total family: `mtotdev`, `ttotdev`, `htotdev`, `mhtotdev`.
+2. ✅ `totdev`, `mtie`, `pdev` (raw kernels).
+3. ✅ Modified-total family: `mtotdev`, `ttotdev`, `htotdev`, `mhtotdev` (raw).
 4. Stats: EDF, confidence intervals, noise identification, bias correction
    (flips the `ci`/`correct_bias` defaults to `True`).
 5. `noise_gen` calibrated power-law generator.
 6. IO, spectral estimators (`Sy`/`Sx`/`L`), plotting.
 
-Numba was originally slated to accelerate the long-record kernels, but the
-milestone-2/3a kernels all vectorize cleanly in NumPy, so it isn't a dependency.
-It will be reconsidered (optionally) only if a later kernel genuinely needs a
-scalar loop that NumPy can't express.
+Numba was originally slated to accelerate the long-record kernels, but every
+kernel so far vectorizes in NumPy (the modified-total family uses a
+per-subsequence loop with vectorized inner reductions), so it isn't a
+dependency. It will be reconsidered (optionally, never package-wide) only if a
+future kernel genuinely needs a scalar loop NumPy can't express.
 
 ## License
 

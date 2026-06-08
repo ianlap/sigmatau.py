@@ -20,9 +20,12 @@ from .grids import Octave, TauMode, _f64, _freq_to_phase, _resolve_m
 from .kernels import (
     _adev_core,
     _hdev_core,
+    _htotdev_core,
     _mdev_core,
     _mhdev_core,
+    _mhtotdev_core,
     _mtie_core,
+    _mtotdev_core,
     _pdev_core,
     _totdev_core,
 )
@@ -146,6 +149,26 @@ def htdev(
     return _no_ci_result("htdev", r.tau, r.dev * factor)
 
 
+def _total_raw(
+    name: str,
+    core: Callable[[np.ndarray, Sequence[int], float], np.ndarray],
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int],
+    ci: bool,
+    correct_bias: bool,
+) -> StabilityResult:
+    """Shared raw path for the total family: no CI, no bias correction yet."""
+    if ci:
+        raise NotImplementedError(_CI_MESSAGE)
+    if correct_bias:
+        raise NotImplementedError(_BIAS_MESSAGE)
+    pd = _as_phase(data)
+    m = _resolve_m(taus, pd.x.size, name)
+    devs = core(_f64(pd.x), m, pd.tau0)
+    tau = np.asarray(m, dtype=np.float64) * pd.tau0
+    return _no_ci_result(name, tau, devs)
+
+
 def totdev(
     data: PhaseData | FrequencyData,
     taus: TauMode | Sequence[int] = Octave,
@@ -161,15 +184,61 @@ def totdev(
     raises ``NotImplementedError``. Note this differs from the Julia oracle, whose
     default is ``True``.
     """
+    return _total_raw("totdev", _totdev_core, data, taus, ci, correct_bias)
+
+
+def mtotdev(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    correct_bias: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Modified Total deviation (Greenhall extension), raw kernel."""
+    return _total_raw("mtotdev", _mtotdev_core, data, taus, ci, correct_bias)
+
+
+def htotdev(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    correct_bias: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Hadamard Total deviation (Greenhall extension on y = diff(x)), raw kernel."""
+    return _total_raw("htotdev", _htotdev_core, data, taus, ci, correct_bias)
+
+
+def mhtotdev(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    correct_bias: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Modified Hadamard Total deviation (SigmaTau-original), raw kernel."""
+    return _total_raw("mhtotdev", _mhtotdev_core, data, taus, ci, correct_bias)
+
+
+def ttotdev(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    correct_bias: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Time Total deviation σ_x(τ) = (τ/√3)·Mod-Total σ_y(τ). Units of seconds."""
     if ci:
         raise NotImplementedError(_CI_MESSAGE)
     if correct_bias:
         raise NotImplementedError(_BIAS_MESSAGE)
-    pd = _as_phase(data)
-    m = _resolve_m(taus, pd.x.size, "totdev")
-    devs = _totdev_core(_f64(pd.x), m, pd.tau0)
-    tau = np.asarray(m, dtype=np.float64) * pd.tau0
-    return _no_ci_result("totdev", tau, devs)
+    r = mtotdev(data, taus, ci=False, correct_bias=False)
+    factor = r.tau / np.sqrt(3.0)
+    return _no_ci_result("ttotdev", r.tau, r.dev * factor)
 
 
 def mtie(

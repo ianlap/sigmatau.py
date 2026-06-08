@@ -60,9 +60,11 @@ repo and copying its output here.
 
 ## Status / roadmap
 
-Through milestone 3a: `adev`, `mdev`, `tdev`, `hdev`, `mhdev`, `htdev`, plus
-`totdev`, `mtie`, `pdev` — all raw kernels, all pure NumPy, all parity-validated
-against the oracle.
+Through milestone 3: all 13 deviations — `adev`, `mdev`, `tdev`, `hdev`,
+`mhdev`, `htdev`, `totdev`, `mtotdev`, `ttotdev`, `htotdev`, `mhtotdev`, `mtie`,
+`pdev` — all raw kernels, all parity-validated against the oracle. The
+modified-total family uses a per-subsequence loop with vectorized inner
+reductions (parity exported on the synthetic N=1024 records, octave grid).
 
 Temporary divergences from Julia (all flip when the stats cycle lands):
 - `ci` defaults to **False** (Julia: `True`); `ci=True` raises `NotImplementedError`

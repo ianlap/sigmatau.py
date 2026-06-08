@@ -189,3 +189,138 @@ def _pdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarra
         var = 72.0 * np.dot(asum, asum) / (m_windows * m**6 * tau0**2)
         devs[k] = np.sqrt(var)
     return devs
+
+
+def _time_reverse_ext(w: np.ndarray) -> np.ndarray:
+    """Greenhall 3× time-reverse extension of a detrended window: [rev, w, rev].
+
+    The reflected segment ``rev_val`` equals ``w`` reversed (the detrending slope
+    makes the forward and reversed-index forms coincide), so the full extension is
+    ``concatenate((w[::-1], w, w[::-1]))``.
+    """
+    wr = w[::-1]
+    return np.concatenate((wr, w, wr))
+
+
+def _total_sumsq(ext: np.ndarray, m: int) -> float:
+    """Σ over the 6m sliding windows of ((a3 − 2a2 + a1)/m)², a1/a2/a3 being the
+    length-m running sums of ``ext`` at offsets 0, m, 2m — the shared inner
+    reduction of MTOTDEV and HTOTDEV."""
+    cs = np.empty(ext.size + 1, dtype=np.float64)
+    cs[0] = 0.0
+    np.cumsum(ext, out=cs[1:])
+    s = np.arange(6 * m)
+    a1 = cs[s + m] - cs[s]
+    a2 = cs[s + 2 * m] - cs[s + m]
+    a3 = cs[s + 3 * m] - cs[s + 2 * m]
+    d = (a3 - 2.0 * a2 + a1) / m
+    return float(np.dot(d, d))
+
+
+def _mtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Modified Total deviation (Greenhall per-window time-reverse + half-mean slope)."""
+    n = x.size
+    devs = np.empty(len(m_values), dtype=np.float64)
+    for k, m in enumerate(m_values):
+        nsubs = n - 3 * m + 1
+        if nsubs < 1:
+            devs[k] = np.nan
+            continue
+        seg_len = 3 * m
+        half_n = seg_len / 2.0
+        hi_half = seg_len // 2
+        lo_half_len = seg_len - hi_half
+        jj = np.arange(seg_len, dtype=np.float64)
+        total = 0.0
+        for start in range(nsubs):
+            win = x[start : start + seg_len]
+            if m == 1:
+                slope = (x[start + 2] - x[start]) / (2.0 * tau0)
+            else:
+                s1 = win[:hi_half].sum()
+                s2 = win[hi_half:].sum()
+                slope = (s2 / lo_half_len - s1 / hi_half) / (half_n * tau0)
+            w = win - slope * tau0 * jj
+            total += _total_sumsq(_time_reverse_ext(w), m) / (6.0 * m)
+        devs[k] = np.sqrt(total / (2.0 * m**2 * tau0**2 * nsubs))
+    return devs
+
+
+def _htotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Hadamard Total deviation, computed on the frequency series y = diff(x)/tau0."""
+    n = x.size
+    y = np.diff(x) / tau0
+    ny = y.size
+    devs = np.empty(len(m_values), dtype=np.float64)
+    for k, m in enumerate(m_values):
+        if m == 1:
+            length = n - 3
+            if length <= 0:
+                devs[k] = np.nan
+                continue
+            d3 = x[3:n] - 3.0 * x[2 : n - 1] + 3.0 * x[1 : n - 2] - x[0 : n - 3]
+            devs[k] = np.sqrt(np.dot(d3, d3) / (6.0 * length * tau0**2))
+            continue
+        n_iter = ny - 3 * m + 1
+        if n_iter < 1:
+            devs[k] = np.nan
+            continue
+        seg_len = 3 * m
+        hi = seg_len // 2
+        lo_start = -(-seg_len // 2) + 1  # ceil(seg_len/2) + 1, 1-indexed
+        lo_count = seg_len - lo_start + 1
+        denom = (0.5 * (seg_len - 1) + 1.0) if seg_len % 2 == 1 else (0.5 * seg_len)
+        mid = seg_len // 2
+        jj = np.arange(seg_len, dtype=np.float64)
+        total = 0.0
+        for i in range(n_iter):
+            seg = y[i : i + seg_len]
+            m1 = seg[:hi].sum() / hi
+            m2 = seg[lo_start - 1 :].sum() / lo_count
+            slope = (m2 - m1) / denom
+            w = seg - slope * (jj - mid)
+            total += _total_sumsq(_time_reverse_ext(w), m) / (6.0 * m)
+        devs[k] = np.sqrt(total / (6.0 * n_iter))
+    return devs
+
+
+def _mhtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Modified Hadamard Total deviation (SigmaTau-original; Greenhall methodology)."""
+    n = x.size
+    devs = np.empty(len(m_values), dtype=np.float64)
+    for k, m in enumerate(m_values):
+        if m < 1:
+            devs[k] = np.nan
+            continue
+        nsubs = n - 4 * m + 1
+        if nsubs < 1:
+            devs[k] = np.nan
+            continue
+        lp = 3 * m + 1
+        l3 = 3 * lp - 3 * m  # = 6m + 3
+        half = lp // 2
+        jj = np.arange(lp, dtype=np.float64)
+        n_avg = l3 + 1 - m
+        total = 0.0
+        for start in range(nsubs):
+            win = x[start : start + lp]
+            s1 = win[:half].mean()
+            s2 = win[half:].mean()
+            slope = (s2 - s1) / ((lp / 2.0) * tau0)
+            w = win - slope * tau0 * jj
+            ext = _time_reverse_ext(w)
+            d3 = (
+                ext[0:l3]
+                - 3.0 * ext[m : m + l3]
+                + 3.0 * ext[2 * m : 2 * m + l3]
+                - ext[3 * m : 3 * m + l3]
+            )
+            if n_avg > 0:
+                cs = np.empty(l3 + 1, dtype=np.float64)
+                cs[0] = 0.0
+                np.cumsum(d3, out=cs[1:])
+                s = np.arange(n_avg)
+                a = cs[s + m] - cs[s]
+                total += float(np.dot(a, a)) / (n_avg * 6.0 * m**2)
+        devs[k] = np.sqrt(total / (nsubs * m**2 * tau0**2))
+    return devs

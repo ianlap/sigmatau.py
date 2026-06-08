@@ -26,6 +26,10 @@ DEVS = {
     "mhdev": st.mhdev,
     "htdev": st.htdev,
     "totdev": st.totdev,
+    "mtotdev": st.mtotdev,
+    "ttotdev": st.ttotdev,
+    "htotdev": st.htotdev,
+    "mhtotdev": st.mhtotdev,
     "mtie": st.mtie,
     "pdev": st.pdev,
 }

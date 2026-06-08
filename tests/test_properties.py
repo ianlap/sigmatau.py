@@ -76,10 +76,21 @@ def test_ci_true_not_implemented() -> None:
             fn(pd, [1, 2], ci=True)
 
 
-def test_totdev_correct_bias_not_implemented() -> None:
+def test_total_family_correct_bias_not_implemented() -> None:
     pd = _phase(64)
-    with pytest.raises(NotImplementedError):
-        st.totdev(pd, [1, 2], correct_bias=True)
+    for fn in (st.totdev, st.mtotdev, st.ttotdev, st.htotdev, st.mhtotdev):
+        with pytest.raises(NotImplementedError):
+            fn(pd, [1, 2], correct_bias=True)
+        with pytest.raises(NotImplementedError):
+            fn(pd, [1, 2], ci=True)
+
+
+def test_ttotdev_is_mtotdev_scaled() -> None:
+    pd = _phase(256)
+    m = [1, 2, 4, 8]
+    rm = st.mtotdev(pd, m)
+    rt = st.ttotdev(pd, m)
+    np.testing.assert_allclose(rt.dev, rm.tau / np.sqrt(3.0) * rm.dev, rtol=1e-13)
 
 
 def test_mtie_ci_is_noop() -> None:
