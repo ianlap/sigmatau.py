@@ -15,7 +15,8 @@ dependencies = ["numpy>=1.24", "scipy>=1.10"]
 
 [project.optional-dependencies]
 plot = ["matplotlib>=3.5"]
-dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.8", "matplotlib>=3.5"]
+accel = ["numba>=0.60"]
+dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.8", "matplotlib>=3.5", "numba>=0.60"]
 
 [project.urls]
 Homepage = "https://github.com/ianlap/sigmatau.py"
@@ -40,5 +41,5 @@ files = ["src/sigmatau"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = "scipy.*"
+module = ["scipy.*", "numba.*"]
 ignore_missing_imports = true

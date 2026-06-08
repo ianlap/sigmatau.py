@@ -9,10 +9,23 @@ Julia ``L``/``Ne`` guards exactly.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
 import numpy as np
 from scipy.signal import correlate as sig_correlate
+
+# Optional Numba acceleration for the loop-bound modified-total family and pdev.
+# When unavailable (or disabled via SIGMATAU_NO_NUMBA), the pure-NumPy batched
+# kernels below are used instead — same results, just slower on long records.
+try:  # pragma: no cover - exercised by whichever backend is installed
+    if os.environ.get("SIGMATAU_NO_NUMBA"):
+        raise ImportError
+    from numba import njit, prange
+
+    _HAS_NUMBA = True
+except ImportError:  # pragma: no cover
+    _HAS_NUMBA = False
 
 
 def _prefix_sum(x: np.ndarray) -> np.ndarray:
@@ -163,7 +176,7 @@ def _mtie_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarra
     return devs
 
 
-def _pdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+def _pdev_batched(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
     """Parabolic deviation (Vernotte 2016/2020).
 
     The weighted parabolic sum ``Σ_k (½(m−1) − k)·(x_{i+k} − x_{i+k+m})`` is a
@@ -225,7 +238,7 @@ def _total_sumsq_2d(ext: np.ndarray, m: int) -> np.ndarray:
     return np.einsum("ij,ij->i", d, d)
 
 
-def _mtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+def _mtotdev_batched(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
     """Modified Total deviation (Greenhall per-window time-reverse + half-mean slope)."""
     n = x.size
     devs = np.empty(len(m_values), dtype=np.float64)
@@ -257,7 +270,7 @@ def _mtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.nda
     return devs
 
 
-def _htotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+def _htotdev_batched(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
     """Hadamard Total deviation, computed on the frequency series y = diff(x)/tau0."""
     n = x.size
     y = np.diff(x) / tau0
@@ -298,7 +311,7 @@ def _htotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.nda
     return devs
 
 
-def _mhtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+def _mhtotdev_batched(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
     """Modified Hadamard Total deviation (SigmaTau-original; Greenhall methodology)."""
     n = x.size
     devs = np.empty(len(m_values), dtype=np.float64)
@@ -340,3 +353,265 @@ def _mhtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.nd
                 total += np.einsum("ij,ij->i", a, a).sum() / (n_avg * 6.0 * m**2)
         devs[k] = np.sqrt(total / (nsubs * m**2 * tau0**2))
     return devs
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Numba-accelerated scalar loops for the loop-bound kernels. Ported directly
+# from the Julia compiled loops (kernels.jl); parallel over subsequences via
+# prange. Selected at call time by the dispatchers below when Numba is present.
+
+if _HAS_NUMBA:
+
+    @njit(cache=True, parallel=True)
+    def _mtotdev_njit(x, m_arr, tau0):  # noqa: ANN001
+        n = x.size
+        devs = np.empty(m_arr.size)
+        for k in range(m_arr.size):
+            m = m_arr[k]
+            nsubs = n - 3 * m + 1
+            if nsubs < 1:
+                devs[k] = np.nan
+                continue
+            seg_len = 3 * m
+            half_n = seg_len / 2.0
+            hi_half = seg_len // 2
+            lo_half_len = seg_len - hi_half
+            mf = float(m)
+            total = 0.0
+            for start in prange(nsubs):
+                if m == 1:
+                    slope = (x[start + 2] - x[start]) / (2.0 * tau0)
+                else:
+                    s1 = 0.0
+                    for i in range(hi_half):
+                        s1 += x[start + i]
+                    s2 = 0.0
+                    for i in range(hi_half, seg_len):
+                        s2 += x[start + i]
+                    slope = (s2 / lo_half_len - s1 / hi_half) / (half_n * tau0)
+                ext = np.empty(3 * seg_len)
+                for j in range(seg_len):
+                    wj = x[start + j] - slope * tau0 * j
+                    ext[seg_len - 1 - j] = wj
+                    ext[seg_len + j] = wj
+                    ext[2 * seg_len + seg_len - 1 - j] = wj
+                a1 = 0.0
+                a2 = 0.0
+                a3 = 0.0
+                for i in range(m):
+                    a1 += ext[i]
+                    a2 += ext[i + m]
+                    a3 += ext[i + 2 * m]
+                d2 = (a3 - 2.0 * a2 + a1) / mf
+                block = d2 * d2
+                for s in range(1, 6 * m):
+                    a1 += ext[s + m - 1] - ext[s - 1]
+                    a2 += ext[s + 2 * m - 1] - ext[s + m - 1]
+                    a3 += ext[s + 3 * m - 1] - ext[s + 2 * m - 1]
+                    d2 = (a3 - 2.0 * a2 + a1) / mf
+                    block += d2 * d2
+                total += block / (6.0 * mf)
+            devs[k] = np.sqrt(total / (2.0 * mf**2 * tau0**2 * nsubs))
+        return devs
+
+    @njit(cache=True, parallel=True)
+    def _htotdev_njit(x, m_arr, tau0):  # noqa: ANN001
+        n = x.size
+        y = np.empty(n - 1)
+        for i in range(n - 1):
+            y[i] = (x[i + 1] - x[i]) / tau0
+        ny = y.size
+        devs = np.empty(m_arr.size)
+        for k in range(m_arr.size):
+            m = m_arr[k]
+            mf = float(m)
+            if m == 1:
+                length = n - 3
+                if length <= 0:
+                    devs[k] = np.nan
+                    continue
+                ss = 0.0
+                for i in range(length):
+                    d3 = x[i + 3] - 3.0 * x[i + 2] + 3.0 * x[i + 1] - x[i]
+                    ss += d3 * d3
+                devs[k] = np.sqrt(ss / (6.0 * length * tau0**2))
+                continue
+            n_iter = ny - 3 * m + 1
+            if n_iter < 1:
+                devs[k] = np.nan
+                continue
+            seg_len = 3 * m
+            hi = seg_len // 2
+            lo_start = (seg_len + 1) // 2 + 1  # ceil(seg_len/2) + 1, 1-indexed
+            lo_count = seg_len - lo_start + 1
+            denom = (0.5 * (seg_len - 1) + 1.0) if seg_len % 2 == 1 else (0.5 * seg_len)
+            mid = seg_len // 2
+            total = 0.0
+            for i0 in prange(n_iter):
+                s1 = 0.0
+                for j in range(hi):
+                    s1 += y[i0 + j]
+                m1 = s1 / hi
+                s2 = 0.0
+                for j in range(lo_start - 1, seg_len):
+                    s2 += y[i0 + j]
+                m2 = s2 / lo_count
+                slope = (m2 - m1) / denom
+                ext = np.empty(3 * seg_len)
+                for j in range(seg_len):
+                    wj = y[i0 + j] - slope * (j - mid)
+                    ext[seg_len - 1 - j] = wj
+                    ext[seg_len + j] = wj
+                    ext[2 * seg_len + seg_len - 1 - j] = wj
+                a1 = 0.0
+                a2 = 0.0
+                a3 = 0.0
+                for i in range(m):
+                    a1 += ext[i]
+                    a2 += ext[i + m]
+                    a3 += ext[i + 2 * m]
+                d3 = (a3 - 2.0 * a2 + a1) / mf
+                block = d3 * d3
+                for s in range(1, 6 * m):
+                    a1 += ext[s + m - 1] - ext[s - 1]
+                    a2 += ext[s + 2 * m - 1] - ext[s + m - 1]
+                    a3 += ext[s + 3 * m - 1] - ext[s + 2 * m - 1]
+                    d3 = (a3 - 2.0 * a2 + a1) / mf
+                    block += d3 * d3
+                total += block / (6.0 * mf)
+            devs[k] = np.sqrt(total / (6.0 * n_iter))
+        return devs
+
+    @njit(cache=True, parallel=True)
+    def _mhtotdev_njit(x, m_arr, tau0):  # noqa: ANN001
+        n = x.size
+        devs = np.empty(m_arr.size)
+        for k in range(m_arr.size):
+            m = m_arr[k]
+            mf = float(m)
+            if m < 1:
+                devs[k] = np.nan
+                continue
+            nsubs = n - 4 * m + 1
+            if nsubs < 1:
+                devs[k] = np.nan
+                continue
+            lp = 3 * m + 1
+            l3 = 3 * lp - 3 * m
+            half = lp // 2
+            n_avg = l3 + 1 - m
+            total = 0.0
+            for start in prange(nsubs):
+                s1 = 0.0
+                for j in range(half):
+                    s1 += x[start + j]
+                s1 /= half
+                s2 = 0.0
+                for j in range(half, lp):
+                    s2 += x[start + j]
+                s2 /= lp - half
+                slope = (s2 - s1) / ((lp / 2.0) * tau0)
+                ext = np.empty(3 * lp)
+                for j in range(lp):
+                    wj = x[start + j] - slope * tau0 * j
+                    ext[lp - 1 - j] = wj
+                    ext[lp + j] = wj
+                    ext[2 * lp + lp - 1 - j] = wj
+                d3v = np.empty(l3)
+                for j in range(l3):
+                    d3v[j] = ext[j] - 3.0 * ext[j + m] + 3.0 * ext[j + 2 * m] - ext[j + 3 * m]
+                if n_avg > 0:
+                    acc = 0.0
+                    for j in range(m):
+                        acc += d3v[j]
+                    block = acc * acc
+                    for w_ in range(1, n_avg):
+                        acc += d3v[w_ + m - 1] - d3v[w_ - 1]
+                        block += acc * acc
+                    total += block / (n_avg * 6.0 * mf**2)
+            devs[k] = np.sqrt(total / (nsubs * mf**2 * tau0**2))
+        return devs
+
+    @njit(cache=True)
+    def _pdev_njit(x, m_arr, tau0):  # noqa: ANN001
+        n = x.size
+        devs = np.empty(m_arr.size)
+        for k in range(m_arr.size):
+            m = m_arr[k]
+            mf = float(m)
+            if m < 1:
+                devs[k] = np.nan
+                continue
+            if m == 1:
+                length = n - 2
+                if length < 2:
+                    devs[k] = np.nan
+                    continue
+                ss = 0.0
+                for i in range(length):
+                    d2 = x[i + 2] - 2.0 * x[i + 1] + x[i]
+                    ss += d2 * d2
+                devs[k] = np.sqrt(ss / (2.0 * length * tau0**2))
+                continue
+            big_m = n - 2 * m
+            if big_m < 2:
+                devs[k] = np.nan
+                continue
+            half = (m - 1) / 2.0
+            a = 0.0
+            b = 0.0
+            for kk in range(m):
+                yv = x[kk] - x[kk + m]
+                a += yv
+                b += kk * yv
+            refresh_every = 4096 if 4096 > m else m
+            next_refresh = refresh_every
+            msum = 0.0
+            for i in range(1, big_m + 1):
+                asum = half * a - b
+                msum += asum * asum
+                if i < big_m:
+                    if i == next_refresh:
+                        a = 0.0
+                        b = 0.0
+                        for kk in range(m):
+                            yv = x[i + kk] - x[i + kk + m]
+                            a += yv
+                            b += kk * yv
+                        next_refresh += refresh_every
+                    else:
+                        yold = x[i - 1] - x[i - 1 + m]
+                        ynew = x[i - 1 + m] - x[i - 1 + 2 * m]
+                        old_a = a
+                        a += ynew - yold
+                        b += (m - 1) * ynew - old_a + yold
+            devs[k] = np.sqrt(72.0 * msum / (big_m * mf**6 * tau0**2))
+        return devs
+
+
+def _mtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Modified Total deviation — Numba scalar loop when available, else batched NumPy."""
+    if _HAS_NUMBA:
+        return _mtotdev_njit(x, np.asarray(m_values, dtype=np.int64), tau0)
+    return _mtotdev_batched(x, m_values, tau0)
+
+
+def _htotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Hadamard Total deviation — Numba scalar loop when available, else batched NumPy."""
+    if _HAS_NUMBA:
+        return _htotdev_njit(x, np.asarray(m_values, dtype=np.int64), tau0)
+    return _htotdev_batched(x, m_values, tau0)
+
+
+def _mhtotdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Modified Hadamard Total deviation — Numba scalar loop when available, else NumPy."""
+    if _HAS_NUMBA:
+        return _mhtotdev_njit(x, np.asarray(m_values, dtype=np.int64), tau0)
+    return _mhtotdev_batched(x, m_values, tau0)
+
+
+def _pdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarray:
+    """Parabolic deviation — Numba rolling recurrence when available, else scipy FFT."""
+    if _HAS_NUMBA:
+        return _pdev_njit(x, np.asarray(m_values, dtype=np.int64), tau0)
+    return _pdev_batched(x, m_values, tau0)
