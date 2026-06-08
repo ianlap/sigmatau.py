@@ -17,12 +17,24 @@ from collections.abc import Callable, Sequence
 import numpy as np
 
 from .grids import Octave, TauMode, _f64, _freq_to_phase, _resolve_m
-from .kernels import _adev_core, _hdev_core, _mdev_core, _mhdev_core
+from .kernels import (
+    _adev_core,
+    _hdev_core,
+    _mdev_core,
+    _mhdev_core,
+    _mtie_core,
+    _pdev_core,
+    _totdev_core,
+)
 from .types import FrequencyData, PhaseData, StabilityResult
 
 _CI_MESSAGE = (
     "ci=True is not implemented in this milestone (no EDF/CI machinery yet); "
     "call with ci=False. CI lands in a later release."
+)
+_BIAS_MESSAGE = (
+    "correct_bias=True needs noise identification + bias correction, which land "
+    "in a later milestone; call with correct_bias=False to get the raw kernel."
 )
 
 
@@ -132,3 +144,60 @@ def htdev(
     r = mhdev(data, taus, ci=False)
     factor = r.tau / np.sqrt(10.0 / 3.0)
     return _no_ci_result("htdev", r.tau, r.dev * factor)
+
+
+def totdev(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    correct_bias: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Total deviation (Howe / SP1065 mean-flip extension), raw kernel.
+
+    ``correct_bias`` defaults to ``False`` this milestone (the SP1065 unbias
+    correction needs noise identification, which lands later); ``correct_bias=True``
+    raises ``NotImplementedError``. Note this differs from the Julia oracle, whose
+    default is ``True``.
+    """
+    if ci:
+        raise NotImplementedError(_CI_MESSAGE)
+    if correct_bias:
+        raise NotImplementedError(_BIAS_MESSAGE)
+    pd = _as_phase(data)
+    m = _resolve_m(taus, pd.x.size, "totdev")
+    devs = _totdev_core(_f64(pd.x), m, pd.tau0)
+    tau = np.asarray(m, dtype=np.float64) * pd.tau0
+    return _no_ci_result("totdev", tau, devs)
+
+
+def mtie(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Maximum Time Interval Error (ITU-T G.810). Units of seconds.
+
+    MTIE has no published EDF/CI model, so ``ci`` and ``confidence`` are accepted
+    for signature uniformity but are no-ops (the result always has empty CI
+    fields), matching the Julia oracle.
+    """
+    pd = _as_phase(data)
+    m = _resolve_m(taus, pd.x.size, "mtie")
+    devs = _mtie_core(_f64(pd.x), m, pd.tau0)
+    tau = np.asarray(m, dtype=np.float64) * pd.tau0
+    return _no_ci_result("mtie", tau, devs)
+
+
+def pdev(
+    data: PhaseData | FrequencyData,
+    taus: TauMode | Sequence[int] = Octave,
+    *,
+    ci: bool = False,
+    confidence: float = 0.683,
+) -> StabilityResult:
+    """Parabolic deviation σ_PDEV(τ) (Vernotte). PDEV(τ₀) ≡ ADEV(τ₀)."""
+    return _simple("pdev", _pdev_core, data, taus, ci)

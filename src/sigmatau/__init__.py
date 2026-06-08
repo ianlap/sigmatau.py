@@ -6,7 +6,7 @@ the bare overlapping deviations (``ci=False`` only); see the project roadmap.
 
 from __future__ import annotations
 
-from .deviations import adev, hdev, htdev, mdev, mhdev, tdev
+from .deviations import adev, hdev, htdev, mdev, mhdev, mtie, pdev, tdev, totdev
 from .grids import (
     AllTaus,
     Decade,
@@ -43,4 +43,7 @@ __all__ = [
     "hdev",
     "mhdev",
     "htdev",
+    "totdev",
+    "mtie",
+    "pdev",
 ]

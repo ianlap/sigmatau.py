@@ -58,14 +58,25 @@ use Float64 and the same algorithm, parity holds tight: `rtol = 1e-11`.
 Regenerate fixtures by running `tools/export_python_fixtures.jl` in the SigmaTau.jl
 repo and copying its output here.
 
-## MVP status / roadmap
+## Status / roadmap
 
-This is milestone 2 (bare deviations). Notable temporary divergence from Julia:
-`ci` defaults to **False** here (Julia defaults `True`) because the EDF/CI
-machinery is not yet ported. The default flips to `True` once `edf.py` lands.
+Through milestone 3a: `adev`, `mdev`, `tdev`, `hdev`, `mhdev`, `htdev`, plus
+`totdev`, `mtie`, `pdev` — all raw kernels, all pure NumPy, all parity-validated
+against the oracle.
 
-Roadmap: total family + MTIE + PDEV (Numba enters here) → EDF/CI/noise-ID/bias →
-`noise_gen` → IO → spectral estimators → plotting.
+Temporary divergences from Julia (all flip when the stats cycle lands):
+- `ci` defaults to **False** (Julia: `True`); `ci=True` raises `NotImplementedError`
+  except on `mtie`, where `ci`/`confidence` are genuine no-ops (no EDF model).
+- `totdev` `correct_bias` defaults to **False** (Julia: `True`); `correct_bias=True`
+  raises `NotImplementedError` (the SP1065 unbias correction needs noise-ID).
+
+Remaining: modified-total family (`mtotdev`/`ttotdev`/`htotdev`/`mhtotdev`) →
+EDF/CI/noise-ID/bias → `noise_gen` → IO → spectral → plotting.
+
+**On Numba:** not a dependency. Numba only accelerates explicit scalar loops;
+every kernel so far vectorizes in NumPy (and `llvmlite` has no wheel for current
+Python here anyway). Reconsider it — surgically, never package-wide — only if a
+future kernel needs a scalar loop NumPy can't express.
 
 ## Testing
 

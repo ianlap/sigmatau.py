@@ -71,9 +71,37 @@ def test_ci_false_leaves_empty_fields() -> None:
 
 def test_ci_true_not_implemented() -> None:
     pd = _phase(64)
-    for fn in (st.adev, st.mdev, st.tdev, st.hdev, st.mhdev, st.htdev):
+    for fn in (st.adev, st.mdev, st.tdev, st.hdev, st.mhdev, st.htdev, st.totdev, st.pdev):
         with pytest.raises(NotImplementedError):
             fn(pd, [1, 2], ci=True)
+
+
+def test_totdev_correct_bias_not_implemented() -> None:
+    pd = _phase(64)
+    with pytest.raises(NotImplementedError):
+        st.totdev(pd, [1, 2], correct_bias=True)
+
+
+def test_mtie_ci_is_noop() -> None:
+    # MTIE has no CI model: ci/confidence are accepted but never populate CI.
+    pd = _phase(64)
+    r = st.mtie(pd, [1, 2, 4], ci=True, confidence=0.9)
+    assert r.edf.size == 0
+    assert r.ci_lower.size == 0
+
+
+def test_pdev_tau0_equals_adev() -> None:
+    pd = _phase(256)
+    np.testing.assert_allclose(st.pdev(pd, [1]).dev, st.adev(pd, [1]).dev, rtol=1e-13)
+
+
+def test_mtie_constant_and_ramp() -> None:
+    # Constant phase -> zero excursion; a pure ramp -> peak-to-peak = slope·m.
+    assert st.mtie(st.PhaseData(np.full(64, 2.0)), [1, 2, 4]).dev.max() == 0.0
+    slope = 3.0
+    ramp = st.PhaseData(np.arange(64, dtype=float) * slope, 1.0)
+    r = st.mtie(ramp, [1, 2, 4])
+    np.testing.assert_allclose(r.dev, slope * np.array([1, 2, 4]), rtol=1e-13)
 
 
 def test_taumode_and_explicit_grid_agree() -> None:
