@@ -49,6 +49,16 @@ hdev(fd)                                         # frequency input also works
 | Result fields `tau`, `dev`, `noise_type`, `ci_lower`, `ci_upper`, `edf` | ✓ | ✓ |
 | Numerics | reference | deviations/EDF to `rtol = 1e-11`, noise type exact, CI to `1e-9` vs the oracle |
 
+## Performance
+
+A three-way benchmark (`benchmarks/bench.py`, see `benchmarks/RESULTS.md`) times
+the common deviations against [allantools](https://github.com/aewallin/allantools)
+and the compiled Julia oracle on an identical record. On a 100k-sample run,
+sigmatau is faster than allantools on the overlapping Allan/Hadamard kernels
+(adev ~1.4×, mdev ~2.7×, hdev ~1.3×); the compiled SigmaTau.jl is naturally
+fastest of the three. Ratios are the portable result — absolute times vary with
+hardware.
+
 ## Roadmap
 
 1. ✅ Bare deviations: `adev`, `mdev`, `tdev`, `hdev`, `mhdev`, `htdev`.

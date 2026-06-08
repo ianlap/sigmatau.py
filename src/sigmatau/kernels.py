@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+from scipy.signal import correlate as sig_correlate
 
 
 def _prefix_sum(x: np.ndarray) -> np.ndarray:
@@ -166,9 +167,11 @@ def _pdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarra
     """Parabolic deviation (Vernotte 2016/2020).
 
     The weighted parabolic sum ``Σ_k (½(m−1) − k)·(x_{i+k} − x_{i+k+m})`` is a
-    fixed-weight correlation of ``x`` with weights ``w_k = ½(m−1) − k``, so each
-    ``m`` evaluates in O(N) via ``np.correlate``. At ``m = 1`` the weights
-    collapse to zero, so PDEV(τ₀) ≡ ADEV(τ₀) (Vernotte 2015) — delegate to ADEV.
+    fixed-weight correlation of ``x`` with weights ``w_k = ½(m−1) − k``. It is
+    evaluated with ``scipy.signal.correlate(method="auto")`` — direct for small
+    ``m``, FFT (O(N log N)) for large ``m`` — avoiding the O(N·m) cost of a plain
+    correlation. At ``m = 1`` the weights collapse to zero, so PDEV(τ₀) ≡
+    ADEV(τ₀) (Vernotte 2015) — delegate to ADEV.
     """
     n = x.size
     devs = np.empty(len(m_values), dtype=np.float64)
@@ -184,7 +187,7 @@ def _pdev_core(x: np.ndarray, m_values: Sequence[int], tau0: float) -> np.ndarra
             devs[k] = np.nan
             continue
         w = (m - 1) / 2.0 - np.arange(m, dtype=np.float64)
-        corr = np.correlate(x, w, mode="valid")  # corr[i] = Σ_k w_k·x[i+k]
+        corr = sig_correlate(x, w, mode="valid", method="auto")  # corr[i] = Σ_k w_k·x[i+k]
         asum = corr[0:m_windows] - corr[m : m + m_windows]
         var = 72.0 * np.dot(asum, asum) / (m_windows * m**6 * tau0**2)
         devs[k] = np.sqrt(var)
