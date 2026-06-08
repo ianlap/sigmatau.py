@@ -56,7 +56,9 @@ hdev(fd)                                         # frequency input also works
 3. ✅ Modified-total family: `mtotdev`, `ttotdev`, `htotdev`, `mhtotdev`.
 4. ✅ Stats: noise identification, EDF, confidence intervals, bias correction
    (`ci`/`correct_bias` default to `True`, matching the oracle).
-5. `noise_gen` calibrated power-law generator.
+5. ✅ `noise_gen` calibrated power-law generator (property-validated — RNGs
+   differ across languages, so it's checked by calibration/identities, not
+   bit-parity).
 6. IO, spectral estimators (`Sy`/`Sx`/`L`), plotting.
 
 Numba was originally slated to accelerate the long-record kernels, but every

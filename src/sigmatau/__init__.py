@@ -1,7 +1,8 @@
 """sigmatau — clock-stability analysis, a NumPy port of SigmaTau.jl.
 
-The public surface mirrors the Julia oracle one-to-one. This release implements
-the bare overlapping deviations (``ci=False`` only); see the project roadmap.
+The public surface mirrors the Julia oracle one-to-one. All 13 deviations are
+implemented with noise ID, EDF, χ² confidence intervals, and bias correction,
+plus a calibrated power-law noise generator; see the project roadmap.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from .grids import (
     TauMode,
     tau_values,
 )
-from .noise import identify_noise
+from .noise import identify_noise, noise_gen
 from .types import FrequencyData, PhaseData, StabilityResult, StabilitySuite
 
 __version__ = "0.1.0"
@@ -71,4 +72,6 @@ __all__ = [
     "calculate_edf",
     "confidence_intervals",
     "bias_correction",
+    # noise generation
+    "noise_gen",
 ]

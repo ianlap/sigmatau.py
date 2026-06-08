@@ -6,16 +6,20 @@ lag-1 autocorrelation method when the decimated record is long enough
 (``N/m ≥ NEFF_RELIABLE``) and the B1-ratio / R(n) fallback otherwise; an
 unreliable τ inherits the last reliable classification.
 
-NumPy only. ``np.std``/``np.var`` are called with ``ddof=1`` to match Julia's
-``Statistics`` (Bessel-corrected) convention. (``noise_gen`` synthesis is a
-later milestone.)
+``identify_noise`` is NumPy only (``np.std``/``np.var`` use ``ddof=1`` to match
+Julia's ``Statistics`` convention). This module also holds ``noise_gen``, the
+calibrated power-law clock-noise generator.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import math
+from collections.abc import Mapping, Sequence
 
 import numpy as np
+
+from .kernels import _adev_core
+from .types import FrequencyData, PhaseData
 
 NEFF_RELIABLE = 30
 _EPS = float(np.finfo(np.float64).eps)
@@ -234,4 +238,116 @@ def _simple_mdev(x: np.ndarray, m: int, tau0: float) -> float:
     return float(np.sqrt(np.dot(d, d) / (2.0 * float(m) ** 2 * tau0**2 * ne)))
 
 
-__all__ = ["identify_noise", "NEFF_RELIABLE"]
+# ──────────────────────────────────────────────────────────────────────
+# Calibrated power-law clock-noise generation (mirrors noise.jl synth + gen)
+#
+# Realizations cannot match the Julia oracle bit-for-bit (NumPy and Julia use
+# different RNGs), so this is validated by its properties — calibration hits the
+# target σ exactly, the h→σ analytic identities hold, independent components sum
+# in quadrature — rather than against golden fixtures.
+
+
+def _gen_powerlaw_y(alpha: float, n: int, rng: np.random.Generator) -> np.ndarray:
+    """White Gaussian noise shaped to a fractional-frequency PSD ∝ f^alpha.
+
+    DC is zeroed (zero-mean output); the absolute level is whatever the f^(α/2)
+    shaper produces on unit-variance white noise — callers rescale to calibrate.
+    """
+    w = rng.standard_normal(n)
+    spec = np.fft.fft(w)
+    f = np.abs(np.fft.fftfreq(n, 1.0))
+    f[0] = 1.0  # placeholder so f^(α/2) is finite at DC; the bin is zeroed next
+    shaped = spec * f ** (alpha / 2.0)
+    shaped[0] = 0.0
+    return np.fft.ifft(shaped).real
+
+
+def _h_to_sigma1(alpha: int, h: float, tau0: float) -> float:
+    """σ_y(τ=τ₀) from the PSD coefficient h_α (SP1065 Table 3, Nyquist f_h=1/2τ₀)."""
+    if alpha == 2:
+        return math.sqrt(3.0 * h / (8.0 * math.pi**2 * tau0**3))
+    if alpha == 1:
+        coef = 1.038 + 3.0 * math.log(math.pi)
+        return math.sqrt(coef * h / (4.0 * math.pi**2 * tau0**2))
+    if alpha == 0:
+        return math.sqrt(h / (2.0 * tau0))
+    if alpha == -1:
+        return math.sqrt(2.0 * math.log(2.0) * h)
+    if alpha == -2:
+        return math.sqrt(2.0 * math.pi**2 * h * tau0 / 3.0)
+    raise ValueError(f"noise_gen: unsupported α = {alpha}; expected ∈ {{-2,-1,0,1,2}}")
+
+
+def _measure_sigma1(y: np.ndarray, tau0: float) -> float:
+    """Empirical σ_y(τ=τ₀) of a frequency vector via overlapping ADEV at m=1."""
+    x = np.cumsum(y) * tau0
+    return float(_adev_core(x, [1], tau0)[0])
+
+
+def _noise_gen_y(
+    n: int,
+    tau0: float,
+    sigma1: Mapping[int, float],
+    h: Mapping[int, float],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Composite fractional-frequency vector: independent per-α components, summed."""
+    if sigma1 and h:
+        raise ValueError("noise_gen: pass either `sigma1` or `h`, not both")
+    if not sigma1 and not h:
+        raise ValueError("noise_gen: noise mixture is empty; pass `sigma1` or `h`")
+    if n < 4:
+        raise ValueError(f"noise_gen: N must be ≥ 4 (got {n})")
+    if not tau0 > 0:
+        raise ValueError(f"noise_gen: tau0 must be > 0 (got {tau0})")
+
+    targets: dict[int, float] = {}
+    source = sigma1 if sigma1 else h
+    for a, val in source.items():
+        if not isinstance(a, int) or isinstance(a, bool):
+            raise ValueError(f"noise_gen: α keys must be int, got {type(a)}")
+        if not -2 <= a <= 2:
+            raise ValueError(f"noise_gen: α must be ∈ {{-2,…,2}}, got {a}")
+        if val < 0:
+            raise ValueError(f"noise_gen: values must be ≥ 0, got {val} for α={a}")
+        targets[a] = float(val) if sigma1 else _h_to_sigma1(a, float(val), tau0)
+
+    y_total = np.zeros(n, dtype=np.float64)
+    for a, sigma_target in targets.items():
+        if sigma_target == 0:
+            continue
+        y_raw = _gen_powerlaw_y(a, n, rng)
+        sigma_raw = _measure_sigma1(y_raw, tau0)
+        if sigma_raw > 0:
+            y_total += y_raw * (sigma_target / sigma_raw)
+    return y_total
+
+
+def noise_gen(
+    kind: type,
+    n: int,
+    tau0: float = 1.0,
+    *,
+    sigma1: Mapping[int, float] | None = None,
+    h: Mapping[int, float] | None = None,
+    rng: int | np.random.Generator | None = None,
+) -> PhaseData | FrequencyData:
+    """Synthesize a length-``n`` clock record with a power-law frequency spectrum.
+
+    ``kind`` is ``PhaseData`` (integrated to phase) or ``FrequencyData`` (raw ``y``).
+    Specify the mixture by ``sigma1[α] = σ_y(τ₀)`` *or* ``h[α] = h_α`` (not both),
+    with α ∈ {−2,−1,0,1,2}. Each component is rescaled to hit its target σ exactly
+    for the drawn realization; components of different α are independent.
+
+    ``rng`` accepts an int seed, a ``numpy.random.Generator``, or ``None`` (fresh).
+    """
+    generator = np.random.default_rng(rng)
+    y = _noise_gen_y(n, float(tau0), sigma1 or {}, h or {}, generator)
+    if kind is PhaseData:
+        return PhaseData(np.cumsum(y) * float(tau0), float(tau0))
+    if kind is FrequencyData:
+        return FrequencyData(y, float(tau0))
+    raise ValueError("noise_gen: kind must be PhaseData or FrequencyData")
+
+
+__all__ = ["identify_noise", "noise_gen", "NEFF_RELIABLE"]
