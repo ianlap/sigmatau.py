@@ -17,7 +17,7 @@ dependencies = ["numpy>=1.24"]
 dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.8"]
 
 [project.urls]
-Homepage = "https://github.com/ianlap/sigmatau"
+Homepage = "https://github.com/ianlap/sigmatau.py"
 "Reference implementation" = "https://github.com/ianlap/SigmaTau.jl"
 
 [tool.hatch.build.targets.wheel]
