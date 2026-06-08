@@ -6,7 +6,7 @@ rich result objects. A NumPy-native port of
 reference oracle: every kernel is validated against golden fixtures exported
 from the tagged Julia release.
 
-> **Status:** all 13 deviations with full statistics (through milestone 4) —
+> **Status: feature-complete.** All 13 deviations with full statistics —
 > `adev`, `mdev`, `tdev`, `hdev`, `mhdev`, `htdev`, `totdev`, `mtotdev`,
 > `ttotdev`, `htotdev`, `mhtotdev`, `mtie`, `pdev`, each reporting per-τ noise
 > type, equivalent degrees of freedom, and χ²-based confidence intervals (and
@@ -65,7 +65,7 @@ hdev(fd)                                         # frequency input also works
    - ✅ IO: `read_phase`/`read_frequency`, `detrend`, `fillgaps` (Howe,
      parity-validated), `save_result`/`load_result`/`save_suite`/`load_suite`
      (TSV, round-trips with the Julia oracle's files).
-   - Plotting helpers (last remaining piece; smoke-tested only).
+   - ✅ Plotting helpers (`sigmatau.plotting`; matplotlib optional extra).
 
 Numba was originally slated to accelerate the long-record kernels, but every
 kernel so far vectorizes in NumPy (the modified-total family uses a

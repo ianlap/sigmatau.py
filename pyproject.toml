@@ -14,7 +14,8 @@ keywords = ["allan deviation", "frequency stability", "clock", "metrology", "tim
 dependencies = ["numpy>=1.24", "scipy>=1.10"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.8"]
+plot = ["matplotlib>=3.5"]
+dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.8", "matplotlib>=3.5"]
 
 [project.urls]
 Homepage = "https://github.com/ianlap/sigmatau.py"
